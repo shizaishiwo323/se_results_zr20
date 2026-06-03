@@ -1,6 +1,6 @@
 ,0
 input,c:\Users\imgw\Downloads\seismoelectric\se_results_zr20\global_evolution.xlsx
-outdir,se_results
+outdir,se_results_offset
 snapshot_index,24
 snapshot_Time_s,5769.2
 snapshot_Porosity,0.75115
