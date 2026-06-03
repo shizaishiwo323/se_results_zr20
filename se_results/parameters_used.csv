@@ -4,10 +4,10 @@ Ly,RTM domain height in z,0.0004,m
 grain_radius,CaCO3 grain radius,3e-05,m
 pore_throat_width,designed pore-throat width,1e-05,m
 z_s,acoustic source distance to interface,0.08,m
-receiver_z_min,minimum receiver/electrode position relative to interface,-0.08,m
-receiver_z_max,maximum receiver/electrode position relative to interface,0.08,m
-receiver_spacing,receiver/electrode trace interval,0.005,m
-offset_D,receiver-line offset,0.045,m
+receiver_z_min,minimum receiver/electrode position relative to interface,-0.02,m
+receiver_z_max,maximum receiver/electrode position relative to interface,0.02,m
+receiver_spacing,receiver/electrode trace interval,0.001,m
+offset_D,receiver-line offset,0.0,m
 f0,source central frequency,500000.0,Hz
 K_b,drained framework bulk modulus,5800000000.0,Pa
 G,framework shear modulus,3400000000.0,Pa

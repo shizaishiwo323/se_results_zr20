@@ -17,8 +17,8 @@ Important scope
 - R_E and T_TM are computed from the Schakel & Smeulders 6x6 boundary-value system.
 - The default waveform gather is a fast zero-offset VSEP-style synthesis: a Ricker pulse at the
   interface arrival time T0 = z_s / V_f, scaled by the computed seismoelectric conversion strength
-  and by the vertical-electric-dipole 1/r^2 geometry for zero offset. This is intended as a first
-  visualization/prototype.
+  and by the vertical-electric-dipole 1/r^2 geometry for zero offset. This is intended as a reduced
+  visualization/prototype and is not a replacement for the full frequency-wavenumber integral.
 - A slower frequency-wavenumber synthesis function following Liu et al. (2018) Eq. (1)--(2) is also
   included and can be activated with --waveform-mode spectral.
 
@@ -60,10 +60,10 @@ class SEConfig:
 
     # VSEP geometry
     z_s: float = 80.0e-3               # m, source-to-interface distance in fluid, Liu-style default
-    receiver_z_min: float = -80.0e-4    # m, fluid side negative
-    receiver_z_max: float = 80.0e-4    # m, porous side positive
-    receiver_spacing: float = 5.0e-4    # m, classic gather trace interval
-    offset_D: float = 0.0              # m, first version: zero offset
+    receiver_z_min: float = -20.0e-3   # m, fluid side negative
+    receiver_z_max: float = 20.0e-3    # m, porous side positive
+    receiver_spacing: float = 1.0e-3   # m, classic gather trace interval
+    offset_D: float = 0.0e-3           # m, receiver-line horizontal offset
 
     # Acoustic source
     f0: float = 500.0e3                # Hz, Liu-style ultrasonic source central frequency
@@ -98,8 +98,9 @@ class SEConfig:
     C_background_molL: float = 1.0e-3  # mol/L, background electrolyte concentration
     H_min_molL: float = 1.0e-7         # mol/L, neutral-water floor for pH calculation
     outlet_h_unit: str = "mol_cm3"     # "mol_cm3" or "mol_L"
-    upper_fluid_conductivity_mode: str = "dynamic_pore_fluid"  # or "constant"
+    upper_fluid_conductivity_mode: str = "constant"  # "constant" strictly follows Schakel Table I; "dynamic_pore_fluid" is optional
     M_similarity: float = 1.0          # Schakel Table I uses M=1
+    reduced_ttm_visual_scale: float = 1.0  # keep 1.0 for formula-consistent reduced plots; >1 only for display
 
     # Numerical stability / validity
     phi_min: float = 0.05
@@ -166,6 +167,10 @@ def load_reactive_transport_table(path: str | Path) -> pd.DataFrame:
             rename[c] = "OutletHConc"
         elif key in ["surfacearea_cm2", "surface_area_cm2"]:
             rename[c] = "SurfaceArea_cm2"
+        elif key in ["fluidconductivity_s_m", "fluid_conductivity_s_m", "sigma_f", "sigma_fluid"]:
+            rename[c] = "FluidConductivity_S_m"
+        elif key in ["electrolyteconcentration_moll", "electrolyte_concentration_moll", "c_moll", "c_mol_l"]:
+            rename[c] = "ElectrolyteConcentration_molL"
     df = df.rename(columns=rename)
 
     required = ["Time_s", "Porosity", "Permeability_mD", "Tortuosity", "OutletHConc"]
@@ -198,17 +203,24 @@ def h_conc_to_molL(cH: float, cfg: SEConfig) -> float:
     return max(cH_molL, cfg.H_min_molL)
 
 
-def electrochemistry_from_h(cH: float, cfg: SEConfig) -> Dict[str, float]:
+def electrochemistry_from_h(cH: float, cfg: SEConfig, C_override_molL: float | None = None) -> Dict[str, float]:
     cH_molL = h_conc_to_molL(cH, cfg)
     pH = -math.log10(cH_molL)
-    # Treat HCl as the controlling binary electrolyte once it exceeds background.
-    C = max(cfg.C_background_molL, cH_molL)
+    # If measured electrolyte concentration is available, use it. Otherwise, if only outlet H+
+    # is available, approximate the electrolyte as background salt plus added HCl.
+    # The latter is a model assumption, not an extra formula from Schakel & Smeulders.
+    if C_override_molL is not None and np.isfinite(C_override_molL) and C_override_molL > 0:
+        C = float(C_override_molL)
+    else:
+        C = cfg.C_background_molL + cH_molL
     zeta = (0.010 + 0.025 * math.log10(C)) * (pH - 2.0) / 5.0
     return {"cH_molL": cH_molL, "pH": pH, "C_molL": C, "zeta": zeta}
 
 
 def dynamic_coefficients(phi: float, k0: float, alpha_inf: float, cH: float,
-                         omega: float, cfg: SEConfig) -> Dict[str, complex]:
+                         omega: float, cfg: SEConfig,
+                         C_override_molL: float | None = None,
+                         sigma_f_override: float | None = None) -> Dict[str, complex]:
     """Compute k(omega), L(omega), sigma(omega), epsbar following Appendix A."""
     phi = float(np.clip(phi, cfg.phi_min, cfg.phi_max_valid))
     k0 = max(float(k0), cfg.k0_min)
@@ -217,7 +229,7 @@ def dynamic_coefficients(phi: float, k0: float, alpha_inf: float, cH: float,
     eta = cfg.eta
     rho_f = cfg.rho_f
 
-    ec = electrochemistry_from_h(cH, cfg)
+    ec = electrochemistry_from_h(cH, cfg, C_override_molL=C_override_molL)
     C = ec["C_molL"]
     zeta = ec["zeta"]
     T = cfg.temperature
@@ -252,6 +264,9 @@ def dynamic_coefficients(phi: float, k0: float, alpha_inf: float, cH: float,
 
     # Appendix A, Eq. A7-A10.
     sigma_f = float(np.sum((e * z_vals)**2 * b_vals * N_vals))
+    if sigma_f_override is not None and np.isfinite(sigma_f_override) and sigma_f_override > 0:
+        # Prefer measured/calibrated pore-fluid conductivity when available.
+        sigma_f = float(sigma_f_override)
 
     if abs(zeta) < 1e-12 or sigma_f <= 0:
         C_em = 0.0
@@ -309,10 +324,14 @@ def biot_elastic_coefficients(phi: float, cfg: SEConfig) -> Tuple[float, float, 
 
 
 def wave_slownesses(phi: float, k0: float, alpha_inf: float, cH: float,
-                    omega: float, cfg: SEConfig) -> Dict[str, complex]:
+                    omega: float, cfg: SEConfig,
+                    C_override_molL: float | None = None,
+                    sigma_f_override: float | None = None) -> Dict[str, complex]:
     """Compute complex slownesses and amplitude ratios Eq. (24)-(39)."""
     phi = float(np.clip(phi, cfg.phi_min, cfg.phi_max_valid))
-    dyn = dynamic_coefficients(phi, k0, alpha_inf, cH, omega, cfg)
+    dyn = dynamic_coefficients(phi, k0, alpha_inf, cH, omega, cfg,
+                               C_override_molL=C_override_molL,
+                               sigma_f_override=sigma_f_override)
     k_dyn = dyn["k_dyn"]
     L = dyn["L"]
     eps_bar = dyn["eps_bar"]
@@ -323,11 +342,13 @@ def wave_slownesses(phi: float, k0: float, alpha_inf: float, cH: float,
     rho_f, rho_s = cfg.rho_f, cfg.rho_s
 
     # Eq. (11)-(13).
-    rho12 = phi * rho_f * (1.0 + 1j * eta / (omega * rho_f * k_dyn))
+    # Schakel Eq. (12): rho12 = phi*rho_f [1 + i phi*eta/(omega*rho_f*k(omega))].
+    rho12 = phi * rho_f * (1.0 + 1j * phi * eta / (omega * rho_f * k_dyn))
     rho11 = (1.0 - phi) * rho_s - rho12
     rho22 = phi * rho_f - rho12
 
     # Eq. (26)-(29).
+    # Schakel Eq. (29): E_K includes phi^2.
     E_K = eta**2 * phi**2 * L**2 / (k_dyn**2 * eps_bar * omega**2)
     rb11 = rho11 - E_K
     rb12 = rho12 + E_K
@@ -359,6 +380,7 @@ def wave_slownesses(phi: float, k0: float, alpha_inf: float, cH: float,
     beta_TM = (G * s2_TM - (1.0 - phi) * rho_s) / (phi * rho_f)
     beta_SV = (G * s2_SV - (1.0 - phi) * rho_s) / (phi * rho_f)
 
+    # Schakel Eqs. (38)-(39): alpha includes phi in eta*phi*L.
     alpha_Pf = eta * phi * L / (k_dyn * eps_bar) * (1.0 - beta_Pf)
     alpha_Ps = eta * phi * L / (k_dyn * eps_bar) * (1.0 - beta_Ps)
     alpha_TM = (mu * eta * phi * L) / (k_dyn * (mu * eps_bar - s2_TM)) * (1.0 - beta_TM)
@@ -377,10 +399,14 @@ def wave_slownesses(phi: float, k0: float, alpha_inf: float, cH: float,
 
 def se_coefficients(phi: float, k0_m2: float, alpha_inf: float, cH: float,
                     omega: float, theta_deg: float | None,
-                    cfg: SEConfig, kx_override: float | None = None) -> Dict[str, complex]:
+                    cfg: SEConfig, kx_override: float | None = None,
+                    C_override_molL: float | None = None,
+                    sigma_f_override: float | None = None) -> Dict[str, complex]:
     """Solve Schakel Appendix B 6x6 system and return R_E, T_TM, etc."""
     phi = float(np.clip(phi, cfg.phi_min, cfg.phi_max_valid))
-    state = wave_slownesses(phi, k0_m2, alpha_inf, cH, omega, cfg)
+    state = wave_slownesses(phi, k0_m2, alpha_inf, cH, omega, cfg,
+                            C_override_molL=C_override_molL,
+                            sigma_f_override=sigma_f_override)
 
     c_fl = math.sqrt(cfg.K_fl / cfg.rho_fl)
     if kx_override is None:
@@ -496,6 +522,16 @@ def _upper_fluid_sigma(state: Dict[str, complex], cfg: SEConfig) -> float:
 # 5. Time-series processing
 # -----------------------------
 
+def optional_float(row: pd.Series, name: str) -> float | None:
+    if name in row.index:
+        try:
+            val = float(row[name])
+            return val if np.isfinite(val) else None
+        except Exception:
+            return None
+    return None
+
+
 def compute_time_series(df: pd.DataFrame, cfg: SEConfig) -> pd.DataFrame:
     omega0 = 2.0 * math.pi * cfg.f0
     rows = []
@@ -506,9 +542,13 @@ def compute_time_series(df: pd.DataFrame, cfg: SEConfig) -> pd.DataFrame:
         k0_m2 = max(float(r["Permeability_mD"]) * 9.869233e-16, cfg.k0_min)
         tau = max(float(r["Tortuosity"]), 1.0 + 1e-6)
         cH = float(r["OutletHConc"])
-        ec = electrochemistry_from_h(cH, cfg)
+        C_override = optional_float(r, "ElectrolyteConcentration_molL")
+        sigma_f_override = optional_float(r, "FluidConductivity_S_m")
+        ec = electrochemistry_from_h(cH, cfg, C_override_molL=C_override)
         try:
-            coeff = se_coefficients(phi, k0_m2, tau, cH, omega0, cfg.coeff_theta_deg, cfg)
+            coeff = se_coefficients(phi, k0_m2, tau, cH, omega0, cfg.coeff_theta_deg, cfg,
+                                    C_override_molL=C_override,
+                                    sigma_f_override=sigma_f_override)
             RE = coeff["R_E"]
             TTM = coeff["T_TM"]
             Lc = coeff["L"]
@@ -529,6 +569,8 @@ def compute_time_series(df: pd.DataFrame, cfg: SEConfig) -> pd.DataFrame:
             "k0_m2": k0_m2,
             "Tortuosity": tau,
             "OutletHConc_raw": cH,
+            "ElectrolyteConcentration_input_molL": C_override,
+            "FluidConductivity_input_S_m": sigma_f_override,
             **ec,
             "omega0_rad_s": omega0,
             "theta_deg": cfg.coeff_theta_deg,
@@ -578,23 +620,32 @@ def synthesize_waveforms_reduced(row: pd.Series, cfg: SEConfig,
     cH = float(row["OutletHConc"])
     omega0 = 2.0 * math.pi * cfg.f0
     if coeff is None:
-        coeff = se_coefficients(phi, k0_m2, tau, cH, omega0, cfg.coeff_theta_deg, cfg)
+        coeff = se_coefficients(phi, k0_m2, tau, cH, omega0, cfg.coeff_theta_deg, cfg,
+                                C_override_molL=optional_float(row, "ElectrolyteConcentration_molL"),
+                                sigma_f_override=optional_float(row, "FluidConductivity_S_m"))
 
-    # Use coefficient strengths from Schakel model. Scale T_TM upward only for visualization if needed,
-    # because R_E and T_TM have different potential-normalization units and magnitudes.
-    amp_re = abs(coeff["R_E"])
-    amp_tm = abs(coeff["T_TM"])
-    amp_scale = amp_re + amp_tm * 1e9  # visualization balancing; absolute units are arbitrary.
-    amp_scale = amp_scale if np.isfinite(amp_scale) and amp_scale > 0 else 1.0
+    # Reduced waveform gather: Liu et al. electric-dipole approximation.
+    # The classic VSEP gather is a radiation pattern of one interface electric dipole,
+    # not a direct side-by-side plot of raw Schakel R_E and T_TM.
+    # R_E and T_TM have different potential definitions / numerical scales in Schakel's 6x6 system;
+    # using raw T_TM for z>0 will visually suppress the porous-side traces.
+    # Here we use one interface source strength from |R_E| and apply the dipole geometry
+    # u ∝ cos(theta)/r^2 = z/(D^2+z^2)^(3/2).
+    interface_strength = abs(coeff["R_E"])
+    if not np.isfinite(interface_strength) or interface_strength == 0:
+        interface_strength = 1.0
 
-    z0 = max(cfg.receiver_spacing, 10e-6)
-    geom = 1.0 / (np.abs(z) + z0)**2
-    geom /= np.nanmax(geom)
-    polarity = np.where(z < 0, -1.0, 1.0)
-    # At exactly z=0, avoid ambiguous polarity and use strongest amplitude.
-    polarity[np.abs(z) < 1e-15] = 0.0
+    z0 = max(0.25 * cfg.receiver_spacing, 10e-6)
+    D = float(cfg.offset_D)
+    geom_signed = z / (D**2 + z**2 + z0**2)**1.5
+    if abs(D) < 1e-15:
+        geom_signed = np.sign(z) / (np.abs(z) + z0)**2
+        geom_signed[np.abs(z) < 1e-15] = 0.0
+    gmax = np.nanmax(np.abs(geom_signed))
+    if gmax > 0 and np.isfinite(gmax):
+        geom_signed = geom_signed / gmax
 
-    U = cfg.source_pressure_amp * amp_scale * polarity[:, None] * geom[:, None] * wave[None, :]
+    U = cfg.source_pressure_amp * interface_strength * geom_signed[:, None] * wave[None, :]
     return z, t, U
 
 
@@ -636,7 +687,9 @@ def synthesize_waveforms_spectral(row: pd.Series, cfg: SEConfig,
             if Akw < 1e-8:
                 continue
             try:
-                coeff = se_coefficients(phi, k0_m2, tau, cH, omega, None, cfg, kx_override=kx)
+                coeff = se_coefficients(phi, k0_m2, tau, cH, omega, None, cfg, kx_override=kx,
+                                        C_override_molL=optional_float(row, "ElectrolyteConcentration_molL"),
+                                        sigma_f_override=optional_float(row, "FluidConductivity_S_m"))
             except Exception:
                 continue
             RE, TTM = coeff["R_E"], coeff["T_TM"]
@@ -729,14 +782,37 @@ def plot_waveform_gather(z: np.ndarray, t: np.ndarray, U: np.ndarray,
     return Amax
 
 
-def compute_peak_amplitude_proxy(ts: pd.DataFrame) -> pd.DataFrame:
-    """Use coefficient-derived conversion strength as fast Amax proxy for all dissolution times."""
+def compute_peak_amplitude_proxy(ts: pd.DataFrame, df_raw: pd.DataFrame, cfg: SEConfig) -> pd.DataFrame:
+    """Compute Amax from the actual reduced waveform gather for each dissolution time.
+
+    This removes the earlier proxy |R_E| + 1e9 |T_TM|.  The result is still a reduced
+    VSEP waveform metric, not the full spectral k-omega integral unless the user runs
+    waveform snapshots in spectral mode separately.
+    """
     out = ts.copy()
-    # Balance RE and TTM for visualization. This mirrors synthesize_waveforms_reduced.
-    out["Amax_proxy"] = out["RE_abs"] + out["TTM_abs"] * 1e9
-    valid_vals = out.loc[out["valid_poroelastic"] & np.isfinite(out["Amax_proxy"]), "Amax_proxy"]
+    vals = []
+    for idx, r in df_raw.reset_index(drop=True).iterrows():
+        if idx >= len(out) or not bool(out.loc[idx, "valid_poroelastic"]):
+            vals.append(np.nan)
+            continue
+        try:
+            phi = float(np.clip(r["Porosity"], cfg.phi_min, cfg.phi_max_valid))
+            coeff = se_coefficients(phi, float(r["Permeability_mD"]) * 9.869233e-16,
+                                    float(r["Tortuosity"]), float(r["OutletHConc"]),
+                                    2.0 * math.pi * cfg.f0, cfg.coeff_theta_deg, cfg,
+                                    C_override_molL=optional_float(r, "ElectrolyteConcentration_molL"),
+                                    sigma_f_override=optional_float(r, "FluidConductivity_S_m"))
+            _, _, U = synthesize_waveforms_reduced(r, cfg, coeff=coeff)
+            vals.append(float(np.nanmax(np.abs(U))))
+        except Exception:
+            vals.append(np.nan)
+    out["Amax_waveform"] = vals
+    valid_vals = out.loc[out["valid_poroelastic"] & np.isfinite(out["Amax_waveform"]), "Amax_waveform"]
     ref = valid_vals.iloc[0] if len(valid_vals) else np.nan
-    out["Amax_proxy_norm"] = out["Amax_proxy"] / ref if ref and np.isfinite(ref) and ref != 0 else np.nan
+    out["Amax_waveform_norm"] = out["Amax_waveform"] / ref if ref and np.isfinite(ref) and ref != 0 else np.nan
+    # Back-compatible column names used by plotting/output.
+    out["Amax_proxy"] = out["Amax_waveform"]
+    out["Amax_proxy_norm"] = out["Amax_waveform_norm"]
     return out
 
 
@@ -805,6 +881,10 @@ def main() -> None:
     parser.add_argument("--receiver-z-max-mm", type=float, default=None, help="Maximum receiver/electrode position relative to interface, in mm")
     parser.add_argument("--receiver-spacing-mm", type=float, default=None, help="Receiver/electrode trace interval, in mm")
     parser.add_argument("--f0", type=float, default=None, help="Override central frequency in Hz")
+    parser.add_argument("--upper-fluid-conductivity-mode", type=str, default=None, choices=["constant", "dynamic_pore_fluid"],
+                        help="constant follows Schakel Table I sigma_fl; dynamic_pore_fluid is a model assumption")
+    parser.add_argument("--reduced-ttm-visual-scale", type=float, default=None,
+                        help="Keep 1.0 for formula-consistent reduced waveform; use >1 only for display enhancement")
     args = parser.parse_args()
 
     cfg = SEConfig()
@@ -820,13 +900,17 @@ def main() -> None:
         cfg.receiver_spacing = args.receiver_spacing_mm * 1e-3
     if args.f0 is not None:
         cfg.f0 = args.f0
+    if args.upper_fluid_conductivity_mode is not None:
+        cfg.upper_fluid_conductivity_mode = args.upper_fluid_conductivity_mode
+    if args.reduced_ttm_visual_scale is not None:
+        cfg.reduced_ttm_visual_scale = args.reduced_ttm_visual_scale
 
     outdir = Path(args.outdir)
     outdir.mkdir(parents=True, exist_ok=True)
 
     df = load_reactive_transport_table(args.input)
     ts = compute_time_series(df, cfg)
-    ts = compute_peak_amplitude_proxy(ts)
+    ts = compute_peak_amplitude_proxy(ts, df, cfg)
     ts.to_csv(outdir / "seismoelectric_timeseries_results.csv", index=False)
     save_parameter_table(cfg, outdir)
 
@@ -842,7 +926,9 @@ def main() -> None:
         phi = float(np.clip(row["Porosity"], cfg.phi_min, cfg.phi_max_valid))
         coeff = se_coefficients(phi, float(row["Permeability_mD"]) * 9.869233e-16,
                                 float(row["Tortuosity"]), float(row["OutletHConc"]),
-                                2.0 * math.pi * cfg.f0, cfg.coeff_theta_deg, cfg)
+                                2.0 * math.pi * cfg.f0, cfg.coeff_theta_deg, cfg,
+                                C_override_molL=optional_float(row, "ElectrolyteConcentration_molL"),
+                                sigma_f_override=optional_float(row, "FluidConductivity_S_m"))
         z, t, U = synthesize_waveforms_reduced(row, cfg, coeff=coeff)
         plot_name = "waveform_snapshot"
     Amax_snapshot = plot_waveform_gather(z, t, U, row, cfg, outdir, plot_name)
