@@ -133,13 +133,13 @@ class SEConfig:
 # -----------------------------
 
 def complex_sqrt_branch(x: complex | np.ndarray) -> complex | np.ndarray:
-    """Square-root branch with non-negative imaginary part; if imag≈0, positive real part."""
+    """Schakel exp(i*omega*t) square-root branch for waves decaying with exp(-i*k*z)."""
     y = np.sqrt(x + 0j)
     if np.isscalar(y):
-        if np.imag(y) < 0 or (abs(np.imag(y)) < 1e-18 and np.real(y) < 0):
+        if np.imag(y) > 0 or (abs(np.imag(y)) < 1e-18 and np.real(y) < 0):
             y = -y
         return y
-    mask = (np.imag(y) < 0) | ((np.abs(np.imag(y)) < 1e-18) & (np.real(y) < 0))
+    mask = (np.imag(y) > 0) | ((np.abs(np.imag(y)) < 1e-18) & (np.real(y) < 0))
     y[mask] = -y[mask]
     return y
 
@@ -620,7 +620,7 @@ def causal_ricker_source_spectrum(omega: np.ndarray | float, cfg: SEConfig,
     Liu's A(k,omega) contains the source spectrum S(omega).  Using only the
     real amplitude spectrum creates a zero-phase pulse centered around T0.  Here
     S(omega) is computed from a source-time wavelet that starts at tau=0, so the
-    propagation phase exp(i k_z z_s) naturally moves the response to T0 without
+    Schakel/Liu exp(i*omega*t) propagation phase naturally moves the response to T0 without
     output-side clipping.
     """
     omega_arr = np.atleast_1d(np.asarray(omega, dtype=float))
@@ -637,7 +637,7 @@ def causal_ricker_source_spectrum(omega: np.ndarray | float, cfg: SEConfig,
         ramp[:ramp_len] = 0.5 * (1.0 - np.cos(np.linspace(0.0, math.pi, ramp_len)))
     src *= ramp
     integrate = getattr(np, "trapezoid", np.trapz)
-    spec = integrate(src[None, :] * np.exp(1j * omega_arr[:, None] * tau[None, :]), tau, axis=1)
+    spec = integrate(src[None, :] * np.exp(-1j * omega_arr[:, None] * tau[None, :]), tau, axis=1)
     peak = np.nanmax(np.abs(spec))
     if np.isfinite(peak) and peak > 0:
         spec = spec / peak
@@ -653,6 +653,16 @@ def _trapz_weights(n: int, dx: float) -> np.ndarray:
         w[0] *= 0.5
         w[-1] *= 0.5
     return w
+
+
+def liu_spatial_phase(spatial_phase: complex | np.ndarray) -> complex | np.ndarray:
+    """Spatial harmonic for the Schakel/Liu exp(i*omega*t) convention."""
+    return np.exp(-1j * spatial_phase)
+
+
+def liu_time_phase(omega: float, t: float | np.ndarray) -> complex | np.ndarray:
+    """Time harmonic used by Schakel and Liu."""
+    return np.exp(1j * omega * t)
 
 
 def liu_interface_coefficient_kx(kx: float) -> float:
@@ -701,10 +711,10 @@ def synthesize_waveforms_spectral(row: pd.Series, cfg: SEConfig,
     The implementation follows the structure of Liu et al. Eq. (1)--(2):
 
         u_r(x,z,t) = ∬ A(k,ω) R_u(k,ω)
-                       exp[i(k_z^i z_s - k_z^{Er} z + k x - ωt)] dk dω
+                       exp[-i(k_z^i z_s - k_z^{Er} z + k x - ωt)] dk dω
 
         u_t(x,z,t) = ∬ A(k,ω) T_u(k,ω)
-                       exp[i(k_z^i z_s + k_z^{Et} z + k x - ωt)] dk dω
+                       exp[-i(k_z^i z_s + k_z^{Et} z + k x - ωt)] dk dω
 
     where R_u and T_u are Liu electrical-potential coefficients obtained from the
     Schakel & Smeulders 6x6 solution for each (k,ω). It preserves frequency
@@ -769,7 +779,7 @@ def synthesize_waveforms_spectral(row: pd.Series, cfg: SEConfig,
         dk = float(k_grid[1] - k_grid[0])
         k_weights = _trapz_weights(n_k, dk)
         S_omega = source_spectrum[iw]
-        phase_t = np.exp(-1j * omega * t)
+        phase_t = liu_time_phase(omega, t)
         coeff_cache: Dict[float, Dict[str, complex]] = {}
 
         for ik, kx in enumerate(k_grid):
@@ -809,15 +819,15 @@ def synthesize_waveforms_spectral(row: pd.Series, cfg: SEConfig,
             kEr = coeff["k3_E"]
             kEt = coeff["k3_TM"]
             weight = 2.0 * Akw * omega_weights[iw] * k_weights[ik] * inv_2pi2
-            common_x = np.exp(1j * kx * x)
+            common_x = liu_spatial_phase(kx * x)
 
             if np.any(fluid_mask):
                 z_fluid = z_receivers[fluid_mask]
-                amp_fluid = RE_potential * np.exp(1j * (kzi * cfg.z_s - kEr * z_fluid)) * common_x
+                amp_fluid = RE_potential * liu_spatial_phase(kzi * cfg.z_s - kEr * z_fluid) * common_x
                 U[fluid_mask, :] += weight * amp_fluid[:, None] * phase_t[None, :]
             if np.any(porous_mask):
                 z_porous = z_receivers[porous_mask]
-                amp_porous = TE_potential * np.exp(1j * (kzi * cfg.z_s + kEt * z_porous)) * common_x
+                amp_porous = TE_potential * liu_spatial_phase(kzi * cfg.z_s + kEt * z_porous) * common_x
                 U[porous_mask, :] += weight * amp_porous[:, None] * phase_t[None, :]
 
     return z_receivers, t, np.real(U)

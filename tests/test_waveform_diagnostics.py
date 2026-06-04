@@ -15,6 +15,41 @@ spec.loader.exec_module(se)
 
 
 class WaveformDiagnosticsTest(unittest.TestCase):
+    def test_complex_sqrt_branch_attenuates_with_schakel_spatial_convention(self):
+        k = se.complex_sqrt_branch(1.0 - 1.0j)
+
+        self.assertGreater(k.real, 0.0)
+        self.assertLess(k.imag, 0.0)
+        self.assertLess(abs(np.exp(-1j * k)), 1.0)
+
+    def test_liu_phase_helpers_follow_exp_iomega_t_convention(self):
+        spatial_phase = 0.7
+        omega = 2.3
+        t = np.array([0.0, 0.4])
+
+        self.assertTrue(np.allclose(se.liu_spatial_phase(spatial_phase), np.exp(-1j * spatial_phase)))
+        self.assertTrue(np.allclose(se.liu_time_phase(omega, t), np.exp(1j * omega * t)))
+
+    def test_causal_ricker_source_spectrum_uses_exp_minus_iomega_tau(self):
+        cfg = se.SEConfig()
+        omega = np.array([0.7, 1.3]) * 2.0 * np.pi * cfg.f0
+        n_time = 512
+
+        actual = se.causal_ricker_source_spectrum(omega, cfg, n_time=n_time)
+
+        duration = max(cfg.source_duration_cycles, cfg.source_peak_cycles + 2.0) / cfg.f0
+        tau = np.linspace(0.0, duration, n_time)
+        src = se.ricker(tau - cfg.source_peak_cycles / cfg.f0, cfg.f0)
+        ramp_len = max(4, min(len(tau), int(0.25 / cfg.f0 / max(tau[1] - tau[0], 1e-15))))
+        ramp = np.ones_like(src)
+        ramp[:ramp_len] = 0.5 * (1.0 - np.cos(np.linspace(0.0, np.pi, ramp_len)))
+        src *= ramp
+        integrate = getattr(np, "trapezoid", np.trapz)
+        expected = integrate(src[None, :] * np.exp(-1j * omega[:, None] * tau[None, :]), tau, axis=1)
+        expected /= np.max(np.abs(expected))
+
+        self.assertTrue(np.allclose(actual, expected))
+
     def test_liu_interface_coefficient_uses_incidence_wavenumber_magnitude(self):
         self.assertEqual(se.liu_interface_coefficient_kx(-12.5), 12.5)
         self.assertEqual(se.liu_interface_coefficient_kx(0.0), 0.0)
