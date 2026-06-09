@@ -65,7 +65,7 @@ class SEConfig:
     receiver_z_min: float = -100.0e-3  # m, fluid side negative; Liu Fig. 2 uses -100..100 mm
     receiver_z_max: float = 100.0e-3   # m, porous side positive
     receiver_spacing: float = 1.0e-3   # m, Liu Fig. 2 receiver trace interval
-    offset_D: float = 45e-3           # m, receiver-line horizontal offset
+    offset_D: float = 0e-3           # m, receiver-line horizontal offset
 
     # Acoustic source
     f0: float = 500.0e3                # Hz, Liu-style ultrasonic source central frequency
@@ -837,6 +837,12 @@ def synthesize_waveforms_spectral(row: pd.Series, cfg: SEConfig,
 # 7. Plotting
 # -----------------------------
 
+def positive_plot_mask(x: np.ndarray, y: pd.Series | np.ndarray, valid: np.ndarray) -> np.ndarray:
+    """Mask finite positive values for log-scale plots."""
+    y_arr = np.asarray(y, dtype=float)
+    return valid & np.isfinite(x) & np.isfinite(y_arr) & (y_arr > 0.0)
+
+
 def plot_coefficients(ts: pd.DataFrame, outdir: Path) -> None:
     fig, ax = plt.subplots(figsize=(7.6, 4.8))
     valid = ts["valid_poroelastic"].to_numpy(bool)
@@ -852,16 +858,63 @@ def plot_coefficients(ts: pd.DataFrame, outdir: Path) -> None:
     fig.savefig(outdir / "coefficients_vs_dissolution_time.png", dpi=300)
     plt.close(fig)
 
+    fig, ax = plt.subplots(figsize=(7.6, 4.8))
+    re_y = ts["RE_abs_norm"]
+    ttm_y = ts["TTM_abs_norm"]
+    re_mask = positive_plot_mask(x, re_y, valid)
+    ttm_mask = positive_plot_mask(x, ttm_y, valid)
+    ax.plot(x[re_mask], re_y.loc[re_mask], marker="o", linewidth=1.6, label=r"$|R_E|/|R_E(t_0)|$")
+    ax.plot(x[ttm_mask], ttm_y.loc[ttm_mask], marker="s", linewidth=1.6, label=r"$|T_{TM}|/|T_{TM}(t_0)|$")
+    ax.set_yscale("log")
+    ax.set_xlabel("Dissolution time (min)")
+    ax.set_ylabel("Normalized coefficient magnitude (log scale)")
+    ax.set_title("Seismoelectric coefficients during calcite dissolution (log scale)")
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(outdir / "coefficients_vs_dissolution_time_logy.png", dpi=300)
+    plt.close(fig)
+
     fig, ax1 = plt.subplots(figsize=(7.6, 4.8))
-    ax1.plot(x[valid], ts.loc[valid, "L_abs_norm"], marker="o", linewidth=1.6, label=r"$|L(\omega)|$ norm")
-    ax1.plot(x[valid], ts.loc[valid, "sigma_abs_norm"], marker="s", linewidth=1.6, label=r"$|\sigma(\omega)|$ norm")
+    ax2 = ax1.twinx()
+    l1, = ax1.plot(x[valid], ts.loc[valid, "L_abs_norm"],
+                   marker="o", linewidth=1.6, color="tab:blue", label=r"$|L(\omega)|$ norm")
+    l2, = ax2.plot(x[valid], ts.loc[valid, "sigma_abs_norm"],
+                   marker="s", linewidth=1.6, color="tab:orange", label=r"$|\sigma(\omega)|$ norm")
     ax1.set_xlabel("Dissolution time (min)")
-    ax1.set_ylabel("Normalized dynamic coefficient")
+    ax1.set_ylabel(r"Normalized $|L(\omega)|$", color="tab:blue")
+    ax2.set_ylabel(r"Normalized $|\sigma(\omega)|$", color="tab:orange")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
     ax1.set_title("Dynamic electrokinetic coefficients")
     ax1.grid(True, alpha=0.3)
-    ax1.legend()
+    ax1.legend([l1, l2], [l1.get_label(), l2.get_label()], loc="upper left")
     fig.tight_layout()
     fig.savefig(outdir / "dynamic_coefficients_vs_dissolution_time.png", dpi=300)
+    plt.close(fig)
+
+    fig, ax1 = plt.subplots(figsize=(7.6, 4.8))
+    ax2 = ax1.twinx()
+    l_y = ts["L_abs_norm"]
+    sig_y = ts["sigma_abs_norm"]
+    l_mask = positive_plot_mask(x, l_y, valid)
+    sig_mask = positive_plot_mask(x, sig_y, valid)
+    l1, = ax1.plot(x[l_mask], l_y.loc[l_mask],
+                   marker="o", linewidth=1.6, color="tab:blue", label=r"$|L(\omega)|$ norm")
+    l2, = ax2.plot(x[sig_mask], sig_y.loc[sig_mask],
+                   marker="s", linewidth=1.6, color="tab:orange", label=r"$|\sigma(\omega)|$ norm")
+    ax1.set_yscale("log")
+    ax2.set_yscale("log")
+    ax1.set_xlabel("Dissolution time (min)")
+    ax1.set_ylabel(r"Normalized $|L(\omega)|$ (log scale)", color="tab:blue")
+    ax2.set_ylabel(r"Normalized $|\sigma(\omega)|$ (log scale)", color="tab:orange")
+    ax1.tick_params(axis="y", labelcolor="tab:blue")
+    ax2.tick_params(axis="y", labelcolor="tab:orange")
+    ax1.set_title("Dynamic electrokinetic coefficients (log scale)")
+    ax1.grid(True, which="both", alpha=0.3)
+    ax1.legend([l1, l2], [l1.get_label(), l2.get_label()], loc="upper left")
+    fig.tight_layout()
+    fig.savefig(outdir / "dynamic_coefficients_vs_dissolution_time_logy.png", dpi=300)
     plt.close(fig)
 
 
@@ -1000,20 +1053,34 @@ def compute_peak_amplitude_spectral(ts: pd.DataFrame, df_raw: pd.DataFrame, cfg:
                                     n_k: int | None = None) -> pd.DataFrame:
     """Compute Amax from the same Liu-style spectral waveform model used for plots."""
     out = ts.copy()
-    vals = []
+    vals_all = []
+    vals_re = []
+    vals_te = []
     for idx, r in df_raw.reset_index(drop=True).iterrows():
         if idx >= len(out) or not bool(out.loc[idx, "valid_poroelastic"]):
-            vals.append(np.nan)
+            vals_all.append(np.nan)
+            vals_re.append(np.nan)
+            vals_te.append(np.nan)
             continue
         try:
-            _, _, U = synthesize_waveforms_spectral(r, cfg, n_omega=n_omega, n_k=n_k)
-            vals.append(float(np.nanmax(np.abs(U))))
+            z, _, U = synthesize_waveforms_spectral(r, cfg, n_omega=n_omega, n_k=n_k)
+            vals_all.append(float(np.nanmax(np.abs(U))))
+            re_mask = z < 0.0
+            te_mask = z > 0.0
+            vals_re.append(float(np.nanmax(np.abs(U[re_mask, :]))) if np.any(re_mask) else np.nan)
+            vals_te.append(float(np.nanmax(np.abs(U[te_mask, :]))) if np.any(te_mask) else np.nan)
         except Exception:
-            vals.append(np.nan)
-    out["Amax_waveform_spectral"] = vals
-    valid_vals = out.loc[out["valid_poroelastic"] & np.isfinite(out["Amax_waveform_spectral"]), "Amax_waveform_spectral"]
-    ref = valid_vals.iloc[0] if len(valid_vals) else np.nan
-    out["Amax_waveform_spectral_norm"] = out["Amax_waveform_spectral"] / ref if ref and np.isfinite(ref) and ref != 0 else np.nan
+            vals_all.append(np.nan)
+            vals_re.append(np.nan)
+            vals_te.append(np.nan)
+
+    out["Amax_waveform_spectral"] = vals_all
+    out["Amax_waveform_spectral_RE"] = vals_re
+    out["Amax_waveform_spectral_TE"] = vals_te
+    for col in ["Amax_waveform_spectral", "Amax_waveform_spectral_RE", "Amax_waveform_spectral_TE"]:
+        valid_vals = out.loc[out["valid_poroelastic"] & np.isfinite(out[col]), col]
+        ref = valid_vals.iloc[0] if len(valid_vals) else np.nan
+        out[f"{col}_norm"] = out[col] / ref if ref and np.isfinite(ref) and ref != 0 else np.nan
     return out
 
 
@@ -1028,6 +1095,47 @@ def plot_peak_amplitude(ts: pd.DataFrame, outdir: Path) -> None:
     ax.grid(True, alpha=0.3)
     fig.tight_layout()
     fig.savefig(outdir / "peak_amplitude_vs_dissolution_time.png", dpi=300)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.8))
+    ax.plot(x[valid], ts.loc[valid, "Amax_waveform_spectral_RE_norm"],
+            marker="o", linewidth=1.6, label=r"$R_E$ side")
+    ax.plot(x[valid], ts.loc[valid, "Amax_waveform_spectral_TE_norm"],
+            marker="s", linewidth=1.6, label=r"$T_E$ side")
+    ax.set_xlabel("Dissolution time (min)")
+    ax.set_ylabel("Side-normalized waveform peak")
+    ax.set_title("Reflected and transmitted interface EM waveform peaks")
+    ax.grid(True, alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(outdir / "peak_amplitude_RE_TE_vs_dissolution_time.png", dpi=300)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.8))
+    re_y = ts["Amax_waveform_spectral_RE_norm"]
+    te_y = ts["Amax_waveform_spectral_TE_norm"]
+    re_mask = positive_plot_mask(x, re_y, valid)
+    te_mask = positive_plot_mask(x, te_y, valid)
+    ax.plot(x[re_mask], re_y.loc[re_mask], marker="o", linewidth=1.6, label=r"$R_E$ side")
+    ax.plot(x[te_mask], te_y.loc[te_mask], marker="s", linewidth=1.6, label=r"$T_E$ side")
+    ax.set_yscale("log")
+    ax.set_xlabel("Dissolution time (min)")
+    ax.set_ylabel("Side-normalized waveform peak (log scale)")
+    ax.set_title("Reflected and transmitted interface EM waveform peaks (log scale)")
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend()
+    fig.tight_layout()
+    fig.savefig(outdir / "peak_amplitude_RE_TE_vs_dissolution_time_logy.png", dpi=300)
+    plt.close(fig)
+
+    fig, ax = plt.subplots(figsize=(7.6, 4.8))
+    ax.plot(x[valid], ts.loc[valid, "Amax_waveform_spectral_TE_norm"], marker="s", linewidth=1.6, color="tab:red")
+    ax.set_xlabel("Dissolution time (min)")
+    ax.set_ylabel("Normalized transmitted waveform peak")
+    ax.set_title("Transmitted interface EM waveform peak during dissolution")
+    ax.grid(True, alpha=0.3)
+    fig.tight_layout()
+    fig.savefig(outdir / "transmitted_peak_amplitude_vs_dissolution_time.png", dpi=300)
     plt.close(fig)
 
 
@@ -1078,7 +1186,7 @@ def main() -> None:
     parser.add_argument(
         "--input",
         type=str,
-        default=str(Path(__file__).with_name("global_evolution.xlsx")),
+        default="C:\\Users\\imgw\\Documents\\MATLAB\\RTSPHEM-main\\T2single-RI\\dissolution_results-Da_0.0369_Pe_10.0000_L_0.0010_lengthXAxis_0.060000_lengthYAxis_0.040000_random\\global_evolution.xlsx",
         help="Input reactive transport table (xlsx/csv/txt). Defaults to global_evolution.xlsx next to this script.",
     )
     parser.add_argument("--outdir", type=str, default="se_results_offset", help="Output directory for results and plots")

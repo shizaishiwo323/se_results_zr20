@@ -195,6 +195,33 @@ class WaveformDiagnosticsTest(unittest.TestCase):
         self.assertTrue(np.allclose(diag["distance_from_interface_m"], [0.02, 0.01, 0.0, 0.01, 0.02]))
         self.assertTrue(np.isclose(diag["liu_dipole_peak_distance_m"].iloc[0], 0.045 / np.sqrt(2.0)))
 
+    def test_peak_amplitude_spectral_records_all_reflected_and_transmitted_peaks(self):
+        cfg = se.SEConfig()
+        ts = pd.DataFrame({"valid_poroelastic": [True, True]})
+        df = pd.DataFrame({"Time_s": [1.0, 2.0]})
+        z = np.array([-0.01, 0.0, 0.01])
+        t = np.array([0.0, 1.0])
+        original = se.synthesize_waveforms_spectral
+
+        def fake_synthesize(row, *_args, **_kwargs):
+            if row["Time_s"] == 1.0:
+                U = np.array([[0.0, 2.0], [0.0, 9.0], [0.0, 3.0]])
+            else:
+                U = np.array([[0.0, 4.0], [0.0, 5.0], [0.0, 12.0]])
+            return z, t, U
+
+        try:
+            se.synthesize_waveforms_spectral = fake_synthesize
+            out = se.compute_peak_amplitude_spectral(ts, df, cfg)
+        finally:
+            se.synthesize_waveforms_spectral = original
+
+        self.assertTrue(np.allclose(out["Amax_waveform_spectral"], [9.0, 12.0]))
+        self.assertTrue(np.allclose(out["Amax_waveform_spectral_RE"], [2.0, 4.0]))
+        self.assertTrue(np.allclose(out["Amax_waveform_spectral_TE"], [3.0, 12.0]))
+        self.assertTrue(np.allclose(out["Amax_waveform_spectral_RE_norm"], [1.0, 2.0]))
+        self.assertTrue(np.allclose(out["Amax_waveform_spectral_TE_norm"], [1.0, 4.0]))
+
 
 if __name__ == "__main__":
     unittest.main()
