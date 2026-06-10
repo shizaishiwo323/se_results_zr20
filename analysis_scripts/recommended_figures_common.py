@@ -307,7 +307,7 @@ def make_figure1(outdir: Path) -> Path:
     ax.text(0.06, 0.92, "Slow dissolution time", fontsize=15, weight="bold", color="#1f2937")
     ax.text(0.66, 0.92, "Fast waveform time", fontsize=15, weight="bold", color="#1f2937")
     ax.annotate(
-        "Time_s: seconds to hours",
+        r"$t_d$ / Time_s: seconds to hours",
         xy=(0.08, 0.86),
         xytext=(0.36, 0.86),
         arrowprops=dict(arrowstyle="->", lw=1.5, color="#2f6f9f"),
@@ -325,10 +325,10 @@ def make_figure1(outdir: Path) -> Path:
         ha="center",
     )
 
-    box((0.05, 0.57), (0.25, 0.19), "Reactive transport outputs\nphi, k0, alpha_inf\nH+, sigma_f", "#eaf3f9")
+    box((0.05, 0.57), (0.25, 0.19), "Reactive transport outputs\n" + r"$\phi$, $k_0$, $\alpha_\infty$" + "\n" + r"$\mathrm{H}^+$, $\sigma_f$", "#eaf3f9")
     box((0.05, 0.29), (0.25, 0.19), "Pore geometry and connectivity\nporosity, permeability,\ntortuosity, surface area", "#eaf3f9")
-    box((0.39, 0.58), (0.23, 0.17), "Dynamic electrokinetic bridge\nk(omega), L(omega), sigma(omega)", "#eef8ef")
-    box((0.39, 0.31), (0.23, 0.17), "Interface boundary problem\nSchakel coefficients\nR_E, T_TM, phase", "#eef8ef")
+    box((0.39, 0.58), (0.23, 0.17), "Dynamic electrokinetic bridge\n" + r"$k(\omega)$, $L(\omega)$, $\sigma(\omega)$", "#eef8ef")
+    box((0.39, 0.31), (0.23, 0.17), "Interface boundary problem\nSchakel coefficients\n" + r"$R_E$, $T_{\mathrm{TM}}$, phase", "#eef8ef")
     box((0.72, 0.58), (0.22, 0.17), "Liu finite-offset waveform\nfrequency-wavenumber integral", "#fff3e8")
     box((0.72, 0.31), (0.22, 0.17), "Interface EM response\namplitude, polarity,\nreceiver-position pattern", "#fff3e8")
 
@@ -363,18 +363,18 @@ def make_figure2(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
     all_rows.to_csv(outdir / "tables" / "figure2_reactive_transport_evolution.csv", index=False)
     fig, axes = plt.subplots(3, 2, figsize=(11.5, 9.0), constrained_layout=True)
     panels = [
-        ("Time_norm", "Porosity", "porosity", "linear"),
-        ("Time_norm", "Permeability_mD", "permeability (mD)", "log"),
-        ("Time_norm", "Tortuosity", "tortuosity", "linear"),
-        ("Time_norm", "pH", "pH from OutletHConc", "linear"),
-        ("Time_norm", "C_molL", "electrolyte concentration (mol/L)", "log"),
-        ("Time_norm", "PoreVolumeToSurface_m", "pore volume / surface area (m)", "log"),
+        ("Time_norm", "Porosity", r"porosity $\phi$", "linear"),
+        ("Time_norm", "Permeability_mD", r"permeability $k_0$ (mD)", "log"),
+        ("Time_norm", "Tortuosity", r"tortuosity $\alpha_\infty$", "linear"),
+        ("Time_norm", "pH", r"pH from $[\mathrm{H}^+]_{\mathrm{out}}$", "linear"),
+        ("Time_norm", "C_molL", r"electrolyte concentration $C$ (mol L$^{-1}$)", "log"),
+        ("Time_norm", "PoreVolumeToSurface_m", r"pore volume/surface area $V_p/S$ (m)", "log"),
     ]
     for ax, (_, ycol, ylabel, yscale) in zip(axes.ravel(), panels):
         for case in cases:
             df = tables[case.name]
-            ax.plot(df["Time_norm"], df[ycol], color=case.color, lw=1.6, marker=".", ms=3, label=f"Pe={case.pe:g}")
-        ax.set_xlabel("normalized dissolution time")
+            ax.plot(df["Time_norm"], df[ycol], color=case.color, lw=1.6, marker=".", ms=3, label=rf"$\mathrm{{Pe}}={case.pe:g}$")
+        ax.set_xlabel(r"normalized dissolution time $t_d/t_{d,\max}$")
         ax.set_ylabel(ylabel)
         if yscale == "log":
             ax.set_yscale("log")
@@ -402,13 +402,17 @@ def make_figure3(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
     scan.to_csv(outdir / "tables" / "figure3_dynamic_electrokinetic_bridge.csv", index=False)
 
     fig, axes = plt.subplots(3, len(cases), figsize=(13.5, 8.5), sharex=True, constrained_layout=True)
-    metrics = [("k_dyn_abs", "|k(omega)| (m2)"), ("L_abs", "|L(omega)|"), ("sigma_abs", "|sigma(omega)| (S/m)")]
+    metrics = [
+        ("k_dyn_abs", r"$|k(\omega)|$ (m$^2$)"),
+        ("L_abs", r"$|L(\omega)|$"),
+        ("sigma_abs", r"$|\sigma(\omega)|$ (S m$^{-1}$)"),
+    ]
     for col, case in enumerate(cases):
         part_case = scan[scan["case"] == case.name]
         for row_i, (metric, ylabel) in enumerate(metrics):
             ax = axes[row_i, col]
             for _, part in part_case.groupby("Time_s"):
-                label = f"t/T={part['Time_norm'].iloc[0]:.2f}"
+                label = rf"$t_d/t_{{d,\max}}={part['Time_norm'].iloc[0]:.2f}$"
                 ax.plot(part["frequency_Hz"] / 1e3, part[metric], lw=1.2, label=label)
             ax.axvline(cfg.f0 / 1e3, color="0.25", ls=":", lw=1.0)
             ax.set_xscale("log")
@@ -417,9 +421,9 @@ def make_figure3(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
             if col == 0:
                 ax.set_ylabel(ylabel)
             if row_i == 0:
-                ax.set_title(f"Pe={case.pe:g}")
+                ax.set_title(rf"$\mathrm{{Pe}}={case.pe:g}$")
             if row_i == 2:
-                ax.set_xlabel("frequency (kHz)")
+                ax.set_xlabel(r"frequency $f$ (kHz)")
     axes[0, 0].legend(fontsize=7, loc="best")
     fig.suptitle("Figure 3. Frequency-dependent dynamic electrokinetic bridge")
     outpath = outdir / "figures" / "figure3_dynamic_electrokinetic_bridge.png"
@@ -457,15 +461,20 @@ def make_figure4(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
     fig, axes = plt.subplots(2, 2, figsize=(10.5, 7.0), constrained_layout=True)
     for case in cases:
         part = time_scan[time_scan["case"] == case.name]
-        axes[0, 0].plot(part["Time_norm"], part["RE_abs"] / part["RE_abs"].iloc[0], color=case.color, label=f"Pe={case.pe:g}")
+        axes[0, 0].plot(part["Time_norm"], part["RE_abs"] / part["RE_abs"].iloc[0], color=case.color, label=rf"$\mathrm{{Pe}}={case.pe:g}$")
         axes[0, 1].plot(part["Time_norm"], part["TTM_abs"] / part["TTM_abs"].iloc[0], color=case.color)
         axes[1, 0].plot(part["Time_norm"], np.unwrap(part["RE_phase_rad"]), color=case.color)
         axes[1, 1].plot(part["Time_norm"], np.unwrap(part["TTM_phase_rad"]), color=case.color)
     for ax, ylabel in zip(
         axes.ravel(),
-        ["|R_E| normalized", "|T_TM| normalized", "R_E phase (rad)", "T_TM phase (rad)"],
+        [
+            r"$|R_E|/|R_E(t_{d,0})|$",
+            r"$|T_{\mathrm{TM}}|/|T_{\mathrm{TM}}(t_{d,0})|$",
+            r"$\arg(R_E)$ (rad)",
+            r"$\arg(T_{\mathrm{TM}})$ (rad)",
+        ],
     ):
-        ax.set_xlabel("normalized dissolution time")
+        ax.set_xlabel(r"normalized dissolution time $t_d/t_{d,\max}$")
         ax.set_ylabel(ylabel)
         ax.grid(True, alpha=0.25)
     axes[0, 0].set_yscale("log")
@@ -489,11 +498,11 @@ def make_figure4(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
                 extent=[freqs.min() / 1e3, freqs.max() / 1e3, angles.min(), angles.max()],
                 cmap="viridis",
             )
-            ax.set_title(f"Pe={case.pe:g}, t/T={stage:.2f}")
-            ax.set_xlabel("frequency (kHz)")
+            ax.set_title(rf"$\mathrm{{Pe}}={case.pe:g}$, $t_d/t_{{d,\max}}={stage:.2f}$")
+            ax.set_xlabel(r"frequency $f$ (kHz)")
             if col_i == 0:
-                ax.set_ylabel("incidence angle (deg)")
-            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02, label="log10 |R_E|")
+                ax.set_ylabel(r"incidence angle $\theta$ (deg)")
+            fig.colorbar(im, ax=ax, fraction=0.046, pad=0.02, label=r"$\log_{10}|R_E|$")
     fig.suptitle("Figure 4b. Schakel-style frequency-angle conversion heatmaps")
     outpath = outdir / "figures" / "figure4b_conversion_frequency_angle_heatmaps.png"
     fig.savefig(outpath, dpi=300)
@@ -535,10 +544,10 @@ def make_figure5(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
             post = float(np.nanmax(np.abs(U[:, t >= T0_us * 1e-6])))
             ax.axvline(T0_us, color="k", ls=":", lw=1.0)
             ax.axhline(0, color="k", lw=0.7)
-            ax.set_title(f"Pe={case.pe:g}, t/T={row['Time_norm']:.2f}")
-            ax.set_xlabel("waveform time (us)")
+            ax.set_title(rf"$\mathrm{{Pe}}={case.pe:g}$, $t_d/t_{{d,\max}}={row['Time_norm']:.2f}$")
+            ax.set_xlabel(r"waveform time $t_w$ ($\mu$s)")
             if col_i == 0:
-                ax.set_ylabel("receiver z (mm)")
+                ax.set_ylabel(r"receiver position $z_r$ (mm)")
             summary_rows.append(
                 {
                     "case": case.name,
@@ -553,7 +562,7 @@ def make_figure5(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
                     "pre_to_post_T0_ratio": pre / post if post > 0 else np.nan,
                 }
             )
-    fig.colorbar(im, ax=axes.ravel().tolist(), fraction=0.025, pad=0.01, label="normalized potential")
+    fig.colorbar(im, ax=axes.ravel().tolist(), fraction=0.025, pad=0.01, label=r"normalized potential $u/\max|u|$")
     fig.suptitle("Figure 5. Finite-offset waveform panels")
     outpath = outdir / "figures" / "figure5_finite_offset_waveform_panels.png"
     fig.savefig(outpath, dpi=300)
@@ -576,7 +585,7 @@ def make_figure6(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
         table["Time_s"] = float(row["Time_s"])
         table["Time_norm"] = float(row["Time_norm"])
         rows.append(table)
-        for side, color in [("R_E", "#2f6f9f"), ("T_E", "#b05a32")]:
+        for side, color, side_label in [("R_E", "#2f6f9f", r"$R_E$ side"), ("T_E", "#b05a32", r"$T_E$ side")]:
             mask = np.where(z < 0, "R_E", np.where(z > 0, "T_E", "interface")) == side
             part = table[mask]
             ax.plot(
@@ -585,7 +594,7 @@ def make_figure6(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
                 marker=".",
                 lw=1.2,
                 color=color,
-                label=f"{side} spectral peak",
+                label=side_label + " spectral peak",
             )
         dip = table[table["z_m"] > 0]
         ax.plot(
@@ -594,12 +603,12 @@ def make_figure6(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
             color="0.2",
             ls="--",
             lw=1.2,
-            label="Liu dipole norm.",
+            label=r"Liu dipole $|z|/r^3$ norm.",
         )
         ax.axvline(abs(cfg.offset_D) / math.sqrt(2.0) * 1e3, color="0.35", ls=":", lw=1.0)
-        ax.set_title(f"Pe={case.pe:g}, late valid stage")
-        ax.set_xlabel("distance from interface (mm)")
-        ax.set_ylabel("side-normalized peak")
+        ax.set_title(rf"$\mathrm{{Pe}}={case.pe:g}$, late valid stage")
+        ax.set_xlabel(r"distance from interface $|z_r|$ (mm)")
+        ax.set_ylabel(r"side-normalized peak $|u|_{\max}$")
         ax.grid(True, alpha=0.25)
         ax.legend(fontsize=7, loc="best")
     all_rows = pd.concat(rows, ignore_index=True)
@@ -660,17 +669,17 @@ def make_figure7(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
         for comp in components:
             part = part_case[part_case["component"] == comp]
             axes[0, col].plot(part["Time_s"], part["RE_abs_norm_to_first"], color=colors[comp], lw=1.2, label=comp)
-        axes[0, col].set_title(f"Pe={case.pe:g}")
+        axes[0, col].set_title(rf"$\mathrm{{Pe}}={case.pe:g}$")
         axes[0, col].set_yscale("log")
-        axes[0, col].set_xlabel("dissolution time (s)")
-        axes[0, col].set_ylabel("|R_E| normalized")
+        axes[0, col].set_xlabel(r"dissolution time $t_d$ (s)")
+        axes[0, col].set_ylabel(r"$|R_E|/|R_E(t_{d,0})|$")
         axes[0, col].grid(True, which="both", alpha=0.25)
         part_contrib = contrib_all[(contrib_all["case"] == case.name) & ~contrib_all["component"].eq("full_observed_change")]
         bar_colors = ["#59a14f" if v > 0 else "#e15759" if v < 0 else "0.6" for v in part_contrib["delta_log10_metric"]]
         axes[1, col].bar(part_contrib["component"], part_contrib["delta_log10_metric"], color=bar_colors)
         axes[1, col].axhline(0, color="k", lw=0.8)
         axes[1, col].tick_params(axis="x", rotation=30)
-        axes[1, col].set_ylabel("delta log10 waveform peak")
+        axes[1, col].set_ylabel(r"$\Delta\log_{10} A_{\max}^{\mathrm{post}\!-\!T_0}$")
         axes[1, col].grid(True, axis="y", alpha=0.25)
     axes[0, 0].legend(fontsize=7, loc="best")
     fig.suptitle("Figure 7. Mechanism decomposition and one-at-a-time sensitivity")
@@ -712,16 +721,16 @@ def make_figure8(cases: Sequence[DissolutionCase], cfg: se.SEConfig, outdir: Pat
 
     fig, axes = plt.subplots(2, 2, figsize=(10.5, 7.4), constrained_layout=True)
     panels = [
-        ("RE_abs_norm", "normalized |R_E|"),
-        ("TTM_abs_norm", "normalized |T_TM|"),
-        ("RE_spectral_ratio_high_over_low_norm", "normalized |R_E(f_high)|/|R_E(f_low)|"),
-        ("L_sigma_index_norm", "normalized |L|/|sigma| index"),
+        ("RE_abs_norm", r"normalized $|R_E|$"),
+        ("TTM_abs_norm", r"normalized $|T_{\mathrm{TM}}|$"),
+        ("RE_spectral_ratio_high_over_low_norm", r"normalized $|R_E(f_{\mathrm{high}})|/|R_E(f_{\mathrm{low}})|$"),
+        ("L_sigma_index_norm", r"normalized $|L|/|\sigma|$ index"),
     ]
     for ax, (col, ylabel) in zip(axes.ravel(), panels):
         for case in cases:
             part = metrics[metrics["case"] == case.name]
-            ax.plot(part["Time_norm"], part[col], color=case.color, lw=1.5, marker=".", ms=3, label=f"Pe={case.pe:g}")
-        ax.set_xlabel("normalized dissolution time")
+            ax.plot(part["Time_norm"], part[col], color=case.color, lw=1.5, marker=".", ms=3, label=rf"$\mathrm{{Pe}}={case.pe:g}$")
+        ax.set_xlabel(r"normalized dissolution time $t_d/t_{d,\max}$")
         ax.set_ylabel(ylabel)
         ax.set_yscale("log")
         ax.grid(True, which="both", alpha=0.25)

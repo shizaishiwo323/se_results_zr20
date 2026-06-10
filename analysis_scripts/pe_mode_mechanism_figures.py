@@ -156,23 +156,23 @@ def draw_mechanism_cartoon():
         color="#3b3b3b",
     )
 
-    box(0.035, 0.72, 0.22, 0.12, "Low Pe\nfront dominated\nslow H+ breakthrough", "#dff3ef", size=9.2, weight="bold")
+    box(0.035, 0.72, 0.22, 0.12, "Low Pe\nfront dominated\n" + r"slow $\mathrm{H}^+$ breakthrough", "#dff3ef", size=9.2, weight="bold")
     box(0.035, 0.50, 0.22, 0.12, "Intermediate Pe\nchanneling begins\npartial acid breakthrough", "#fff0cf", size=9.2, weight="bold")
     box(0.035, 0.28, 0.22, 0.12, "High Pe\nfast channeling\nacid breakthrough", "#f1e2f2", size=9.2, weight="bold")
 
-    box(0.33, 0.64, 0.19, 0.13, "Hydraulic branch\nk/k0 increases\ntortuosity decreases", "#e8edf6", size=9.2, weight="bold")
-    box(0.33, 0.36, 0.19, 0.13, "Electrochemical branch\nH+ increases\nzeta -> 0 / sign change\nsigma increases", "#f7e5dd", size=8.4, weight="bold")
+    box(0.33, 0.64, 0.19, 0.13, "Hydraulic branch\n" + r"$k/k_0$ increases" + "\ntortuosity decreases", "#e8edf6", size=9.2, weight="bold")
+    box(0.33, 0.36, 0.19, 0.13, "Electrochemical branch\n" + r"$\mathrm{H}^+$ increases" + "\n" + r"$\zeta\rightarrow0$ / sign change" + "\n" + r"$\sigma$ increases", "#f7e5dd", size=8.4, weight="bold")
 
     box(0.62, 0.58, 0.18, 0.12, "Potential amplification\nstronger relative\nfluid-solid motion", "#edf6e9", size=9.0)
-    box(0.62, 0.34, 0.18, 0.14, "Dominant suppression\nL/sigma collapses\nelectrical screening\nsource polarity changes", "#f8dede", size=8.4, weight="bold")
+    box(0.62, 0.34, 0.18, 0.14, "Dominant suppression\n" + r"$|L|/|\sigma|$ collapses" + "\nelectrical screening\nsource polarity changes", "#f8dede", size=8.4, weight="bold")
 
-    box(0.865, 0.55, 0.12, 0.12, "Large SE\nresponse\nif H+ delayed", "#dff3ef", size=8.8, weight="bold")
+    box(0.865, 0.55, 0.12, 0.12, "Large SE\nresponse\n" + r"if $\mathrm{H}^+$ delayed", "#dff3ef", size=8.8, weight="bold")
     box(0.865, 0.32, 0.12, 0.15, "Weak / reversed\ninterface EM\nresponse\nafter breakthrough", "#f1e2f2", size=8.2, weight="bold")
 
     arrow(0.255, 0.78, 0.33, 0.70)
     arrow(0.255, 0.56, 0.33, 0.70)
     arrow(0.255, 0.34, 0.33, 0.70)
-    arrow(0.255, 0.34, 0.33, 0.43, color="#9b3a2c", text="early H+ arrival", ty=-0.035)
+    arrow(0.255, 0.34, 0.33, 0.43, color="#9b3a2c", text=r"early $\mathrm{H}^+$ arrival", ty=-0.035)
     arrow(0.52, 0.70, 0.62, 0.64)
     arrow(0.52, 0.43, 0.62, 0.41, color="#9b3a2c")
     arrow(0.80, 0.64, 0.865, 0.61)
@@ -192,7 +192,7 @@ def draw_mechanism_cartoon():
     ax.text(
         0.24,
         0.07,
-        "The controlling diagnostic is not porosity alone, but the coupled electrokinetic efficiency |L(omega)|/|sigma(omega)|.",
+        r"The controlling diagnostic is not porosity alone, but the coupled electrokinetic efficiency $|L(\omega)|/|\sigma(\omega)|$.",
         fontsize=10.2,
         color="#262626",
     )
@@ -202,11 +202,11 @@ def draw_mechanism_cartoon():
 def plot_parameter_bridge(data: Dict[str, pd.DataFrame]):
     fig, axes = plt.subplots(2, 3, figsize=(12.8, 7.6), constrained_layout=True)
     panels = [
-        ("k_k0", "Permeability ratio k/k0", True),
-        ("cH_molL", "H+ concentration (mol/L)", True),
-        ("zeta", "Zeta potential (V)", False),
-        ("sigma_abs", "|sigma(omega)| (S/m)", True),
-        ("L_over_sigma", "|L(omega)| / |sigma(omega)|", True),
+        ("k_k0", r"permeability ratio $k/k_0$", True),
+        ("cH_molL", r"$[\mathrm{H}^+]$ (mol L$^{-1}$)", True),
+        ("zeta", r"zeta potential $\zeta$ (V)", False),
+        ("sigma_abs", r"$|\sigma(\omega)|$ (S m$^{-1}$)", True),
+        ("L_over_sigma", r"$|L(\omega)|/|\sigma(\omega)|$", True),
         ("Amax_waveform_spectral", "Waveform peak amplitude", True),
     ]
     for ax, (col, title, logy) in zip(axes.flat, panels):
@@ -222,7 +222,7 @@ def plot_parameter_bridge(data: Dict[str, pd.DataFrame]):
             )
         if col == "zeta":
             ax.axhline(0, color="#333333", lw=1.0, ls="--")
-        style_axis(ax, xlabel="Porosity", ylabel=title, title=title, logy=logy)
+        style_axis(ax, xlabel=r"porosity $\phi$", ylabel=title, title=title, logy=logy)
     axes[0, 0].legend(frameon=False, loc="best")
     fig.suptitle(
         "Same final state, different paths: acid breakthrough controls the electrokinetic bridge",
@@ -284,7 +284,7 @@ def plot_attribution(data: Dict[str, pd.DataFrame]):
         ax.axhline(1, color="#333333", lw=1, ls="--")
         ax.set_xticks(x)
         ax.set_xticklabels(labels, rotation=35, ha="right")
-        ax.set_title(f"phi ~= {phi_target:.2f}", loc="left", fontweight="bold")
+        ax.set_title(rf"$\phi \approx {phi_target:.2f}$", loc="left", fontweight="bold")
         ax.grid(True, axis="y", which="major", alpha=0.25)
         ax.grid(True, axis="y", which="minor", alpha=0.10)
         for b, value in zip(bars, part["RE_ratio"]):
@@ -298,7 +298,7 @@ def plot_attribution(data: Dict[str, pd.DataFrame]):
                     fontsize=8.5,
                     rotation=90,
                 )
-    axes[0].set_ylabel("R_E ratio relative to Pe=0.1 baseline")
+    axes[0].set_ylabel(r"$R_E$ ratio relative to $\mathrm{Pe}=0.1$ baseline")
     fig.suptitle(
         "One-at-a-time attribution: Pe=10 chemistry, not permeability alone, collapses conversion",
         fontsize=14,
@@ -330,8 +330,8 @@ def plot_spatial_polarity():
     axes[0].axvline(0, color="#333333", lw=0.8, ls="--")
     style_axis(
         axes[0],
-        xlabel="Receiver z (mm)",
-        ylabel="Normalized signed peak",
+        xlabel=r"receiver depth $z_r$ (mm)",
+        ylabel=r"signed peak / $\max |\mathrm{peak}|$",
         title="A. Signed spatial pattern",
     )
     axes[0].legend(frameon=False, loc="best")
@@ -340,10 +340,17 @@ def plot_spatial_polarity():
     width = 0.26
     x = np.arange(3)
     pe_order = ["Pe=0.1", "Pe=1", "Pe=10"]
+    side_labels = {"R_E": r"$R_E$ side", "T_E": r"$T_E$ side"}
     for j, side in enumerate(["R_E", "T_E"]):
         values = [abs(peaks[(peaks["Pe"] == pe) & (peaks["side"] == side)]["peak_signed"].iloc[0]) for pe in pe_order]
         signs = [np.sign(peaks[(peaks["Pe"] == pe) & (peaks["side"] == side)]["peak_signed"].iloc[0]) for pe in pe_order]
-        bars = axes[1].bar(x + (j - 0.5) * width, values, width=width, label=side, color=["#4c78a8", "#f58518"][j])
+        bars = axes[1].bar(
+            x + (j - 0.5) * width,
+            values,
+            width=width,
+            label=side_labels[side],
+            color=["#4c78a8", "#f58518"][j],
+        )
         for bar, sign in zip(bars, signs):
             axes[1].text(
                 bar.get_x() + bar.get_width() / 2,
@@ -357,18 +364,18 @@ def plot_spatial_polarity():
     axes[1].set_yscale("log")
     axes[1].set_xticks(x)
     axes[1].set_xticklabels(pe_order)
-    style_axis(axes[1], ylabel="Absolute signed peak", title="B. Peak magnitude and polarity")
+    style_axis(axes[1], ylabel=r"$|\mathrm{signed\ peak}|$", title="B. Peak magnitude and polarity")
     axes[1].legend(frameon=False)
-    fig.suptitle("Finite-offset polarity reversal records the zeta-potential sign change", fontsize=14, fontweight="bold")
+    fig.suptitle(r"Finite-offset polarity reversal records the $\zeta$-potential sign change", fontsize=14, fontweight="bold")
     peaks.to_csv(OUTDIR / "spatial_peak_polarity_summary.csv", index=False)
     savefig(fig, "fig4_spatial_polarity_reversal.png")
 
 
 def build_snapshot_triptych():
     snapshots = {
-        "Pe=0.1\nfront-dominated\nphi~0.79, t=7119.2 s": RT_DIRS["Pe=0.1"] / "timestep_0028.png",
-        "Pe=1\nchanneling\nphi~0.80, t=400.6 s": RT_DIRS["Pe=1"] / "timestep_0024.png",
-        "Pe=10\nfast acid breakthrough\nphi~0.81, t=56.4 s": RT_DIRS["Pe=10"] / "timestep_0017.png",
+        "Pe = 0.1\nfront dominated\nporosity approx. 0.79, t = 7119.2 s": RT_DIRS["Pe=0.1"] / "timestep_0028.png",
+        "Pe = 1\nchanneling\nporosity approx. 0.80, t = 400.6 s": RT_DIRS["Pe=1"] / "timestep_0024.png",
+        "Pe = 10\nfast acid breakthrough\nporosity approx. 0.81, t = 56.4 s": RT_DIRS["Pe=10"] / "timestep_0017.png",
     }
     imgs = [Image.open(p).convert("RGB") for p in snapshots.values()]
     target_w = 760

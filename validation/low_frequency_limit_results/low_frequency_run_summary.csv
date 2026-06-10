@@ -1,0 +1,2 @@
+input,n_dissolution_steps,n_frequency_samples,theta_deg,frequency_min_positive_Hz,frequency_max_Hz,output_directory
+global_evolution.xlsx,44,11,45.0,1e-06,1000.0,low_frequency_limit_results

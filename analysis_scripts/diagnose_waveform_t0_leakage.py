@@ -33,10 +33,10 @@ def main() -> None:
     labels = [f"{row.case}\nstep {int(row.TimeStep)}" for row in df.itertuples()]
     fig, ax = plt.subplots(figsize=(10.5, 4.2), constrained_layout=True)
     ax.bar(labels, df["pre_to_post_T0_ratio"], color="#8a6f3f")
-    ax.axhline(0.1, color="0.2", ls=":", lw=1.1, label="10% reference")
-    ax.axhline(1.0, color="#b05a32", ls="--", lw=1.1, label="pre = post")
-    ax.set_ylabel("max |U| before T0 / max |U| after T0")
-    ax.set_title("Waveform T0 leakage diagnostic for finite-band spectral panels")
+    ax.axhline(0.1, color="0.2", ls=":", lw=1.1, label=r"$10\%$ reference")
+    ax.axhline(1.0, color="#b05a32", ls="--", lw=1.1, label=r"pre-$T_0$ = post-$T_0$")
+    ax.set_ylabel(r"$\max |u|_{\mathrm{pre}\!-\!T_0}/\max |u|_{\mathrm{post}\!-\!T_0}$")
+    ax.set_title(r"Waveform $T_0$ leakage diagnostic for finite-band spectral panels")
     ax.tick_params(axis="x", rotation=35)
     ax.grid(True, axis="y", alpha=0.25)
     ax.legend(loc="best")
@@ -49,4 +49,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

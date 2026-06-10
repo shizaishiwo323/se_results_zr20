@@ -50,13 +50,13 @@ def main() -> None:
     fig, axes = plt.subplots(1, 2, figsize=(9.5, 3.8), constrained_layout=True)
     axes[0].plot(df["n_omega"], df["post_T0_peak_norm_to_n256"], marker="o")
     axes[0].axhline(1.0, color="0.3", ls=":", lw=1.0)
-    axes[0].set_xlabel("n_omega")
-    axes[0].set_ylabel("post-T0 peak / n=256")
+    axes[0].set_xlabel(r"$n_\omega$")
+    axes[0].set_ylabel(r"$A_{\max}^{\mathrm{post}\!-\!T_0}/A_{\max}^{n_\omega=256}$")
     axes[0].grid(True, alpha=0.25)
     axes[1].plot(df["n_omega"], df["pre_to_post_T0_ratio"], marker="o", color="#8a6f3f")
     axes[1].axhline(0.1, color="0.3", ls=":", lw=1.0)
-    axes[1].set_xlabel("n_omega")
-    axes[1].set_ylabel("pre/post T0 ratio")
+    axes[1].set_xlabel(r"$n_\omega$")
+    axes[1].set_ylabel(r"$\max |u|_{\mathrm{pre}\!-\!T_0}/\max |u|_{\mathrm{post}\!-\!T_0}$")
     axes[1].set_yscale("log")
     axes[1].grid(True, which="both", alpha=0.25)
     outpath = outdir / "figures" / "waveform_frequency_convergence.png"
@@ -68,4 +68,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
